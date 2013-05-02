@@ -14,13 +14,13 @@ using namespace std;
 enum brushStyle{Square,Circle,Line};
 enum wheelMode{bSize,MaxF};
 enum fieldType{Ex,Ey,Hz};
-void set_mesh(mesh** Mesh,int X,int Y,double Ds, double d_cell);
-void reset_mesh(mesh** Mesh, int X,int Y);
-void clear_mesh(mesh** Mesh, int X,int Y);
-void save_field(mesh**,int,int,bool);
-void load_field(mesh**,int,int);
-mesh** FDTD2DInit(double, double, int, int);
-void update_TEz(mesh** Mesh,int X,int Y);
+void set_mesh(mesh* Mesh,int X,int Y,double Ds, double d_cell);
+void reset_mesh(mesh* Mesh, int X,int Y);
+void clear_mesh(mesh* Mesh, int X,int Y);
+void save_field(mesh*,int,int,bool);
+void load_field(mesh*,int,int);
+mesh* FDTD2DInit(double, double, int, int);
+void update_TEz(mesh* Mesh,int X,int Y);
 SDL_Surface* InitialSetting(string,int,int,int);
 double source(int,int,double,bool);
 GLuint loadTexture( const std::string &fileName );
@@ -41,7 +41,7 @@ int main(int argc,char* argv[]){
 	const float MatB[Matnum]={0,0.7,0.3,0.1};
     SDL_Surface* surface=NULL;
     surface=InitialSetting("EMGame",500,700,FDTDSIZE);
-    mesh** Mesh=FDTD2DInit(0.05,5e-11,FDTDSIZE,FDTDSIZE);
+    mesh* Mesh=FDTD2DInit(0.05,5e-11,FDTDSIZE,FDTDSIZE);
     bool isRunning=true;
     bool isDrag=false;
     int X,Y,Xi,Yi;
@@ -208,7 +208,7 @@ int main(int argc,char* argv[]){
 					for(int i=X-brushsize;i<X+brushsize;i++){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-							Mesh[i][j].set_material(currentMat);
+							Mesh[i*FDTDSIZE+j].set_material(currentMat);
 						}
 					}
 					break;
@@ -216,7 +216,7 @@ int main(int argc,char* argv[]){
 					for(int i=X-brushsize;i<X+brushsize;i++){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
-							Mesh[i][j].set_material(currentMat);
+							Mesh[i*FDTDSIZE+j].set_material(currentMat);
 						}
 					}
 					break;
@@ -229,14 +229,14 @@ int main(int argc,char* argv[]){
 						for(int i=min(Startx,Endx)-brushsize;i<max(Startx,Endx)+brushsize;i++){
 							for(int j=Starty-brushsize;j<Starty+brushsize;j++){
 								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-								Mesh[i][j].set_material(currentMat);
+								Mesh[i*FDTDSIZE+j].set_material(currentMat);
 							}
 						}
 					}else{
 						for(int i=Startx-brushsize;i<Startx+brushsize;i++){
 							for(int j=min(Starty,Endy)-brushsize;j<max(Starty,Endy)+brushsize;j++){
 								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-								Mesh[i][j].set_material(currentMat);
+								Mesh[i*FDTDSIZE+j].set_material(currentMat);
 							}
 						}
 					}
@@ -248,19 +248,19 @@ int main(int argc,char* argv[]){
 				if(abs(Endx-Startx)>abs(Endy-Starty)){
 					for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
 						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
-						Mesh[i][Starty].Srctype=currentSrc;
+						Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
 					}
 				}else{
 					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 						if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-						Mesh[Startx][j].Srctype=currentSrc;
+						Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
 					}
 				}
         	}else{
 				for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
 					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-						Mesh[i][j].Srctype=currentSrc;
+						Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
 					}
 				}
         	}
@@ -303,7 +303,7 @@ int main(int argc,char* argv[]){
         //Drawing Material
             for ( int i = D_CELL; i < FDTDSIZE-D_CELL+1; ++i ){
                 for(int j=D_CELL;j<FDTDSIZE-D_CELL+1;j++){
-                    float* color=Mesh[i][j].matcolor();
+                    float* color=Mesh[i*FDTDSIZE+j].matcolor();
                     glColor4f(color[0],color[1],color[2],color[3]);
                     glVertex2f( (i+0.5-D_CELL)*RATIO,(j+0.5-D_CELL)*RATIO );
                 }
@@ -314,13 +314,13 @@ int main(int argc,char* argv[]){
                     float color;
                     switch(currentfType){
 					case Ex:
-						color=(Mesh[i][j].Ex)/Maxfield;
+						color=(Mesh[i*FDTDSIZE+j].Ex)/Maxfield;
 						break;
 					case Ey:
-						color=(Mesh[i][j].Ey)/Maxfield;
+						color=(Mesh[i*FDTDSIZE+j].Ey)/Maxfield;
 						break;
 					case Hz:
-						color=(Mesh[i][j].Hz)/Maxfield*eta_0;
+						color=(Mesh[i*FDTDSIZE+j].Hz)/Maxfield*eta_0;
 						break;
                     }
                     if(color>0)
@@ -518,73 +518,74 @@ SDL_Surface* InitialSetting(string title,int width,int height,int FDTDsize){
     glEnable( GL_TEXTURE_2D );
     return surface;
 }
-void set_mesh(mesh** Mesh,int X,int Y,double Ds, double Dt,double d_cell){
+void set_mesh(mesh* Mesh,int X,int Y,double Ds, double Dt,double d_cell){
     int m=2;
     for(int i=0;i<X;i++){
         for(int j=0;j<Y;j++){
-            Mesh[i][j].set_size(Ds,Dt);
+            Mesh[i*FDTDSIZE+j].set_size(Ds,Dt);
         }
     }
     for(int j=0;j<d_cell;j++){
         for(int i=0;i<X;i++){
             double d_E=(d_cell-j)/d_cell;
             double d_M=(d_cell-j-0.5)/d_cell;
-            double smax=0.8*(m+1)/Mesh[i][j].m.eta/Ds;
-            Mesh[i][j].set_PML("y",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
+            double smax=0.8*(m+1)/Mesh[i*FDTDSIZE+j].m.eta/Ds;
+            Mesh[i*FDTDSIZE+j].set_PML("y",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
             d_M=(d_cell-j+0.5)/d_cell;
-            Mesh[i][Y-1-j].set_PML("y",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
+            Mesh[i*FDTDSIZE+Y-1-j].set_PML("y",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
         }
     }
     for(int i=0;i<d_cell;i++){
         for(int j=0;j<Y;j++){
             double d_E=(d_cell-i)/d_cell;
             double d_M=(d_cell-i-0.5)/d_cell;
-            double smax=0.8*(m+1)/(Mesh[i][j].m.eta*Ds);
-            Mesh[i][j].set_PML("x",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
+            double smax=0.8*(m+1)/(Mesh[i*FDTDSIZE+j].m.eta*Ds);
+            Mesh[i*FDTDSIZE+j].set_PML("x",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
             d_M=(d_cell-i+0.5)/d_cell;
-            Mesh[X-1-i][j].set_PML("x",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
+            Mesh[(X-1-i)*FDTDSIZE+j].set_PML("x",pow(d_E,m)*smax,pow(d_M,m)*smax*mu_0/epsilon_0);
         }
     }
     cout<<"Mesh Initialized\n";
 }
-void reset_mesh(mesh** Mesh,int X, int Y){
+void reset_mesh(mesh* Mesh,int X, int Y){
     for(int i=0;i<X;i++){
         for(int j=0;j<Y;j++){
-            Mesh[i][j].reset();
+            Mesh[i*FDTDSIZE+j].reset();
         }
     }
 }
-void clear_mesh(mesh** Mesh,int X, int Y){
+void clear_mesh(mesh* Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
         for(int j=D_CELL;j<Y-D_CELL;j++){
-            Mesh[i][j].clearall();
+            Mesh[i*FDTDSIZE+j].clearall();
         }
     }
 }
-void update_TEz(mesh** Mesh,int X,int Y){
+void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
         for(int j=1;j<Y-1;j++){
-            Mesh[i][j].Hx=Mesh[i][j].Dax*Mesh[i][j].Hx-Mesh[i][j].Dbx*(Mesh[i+1][j].Ey-Mesh[i][j].Ey);
-            Mesh[i][j].Hy=Mesh[i][j].Day*Mesh[i][j].Hy+Mesh[i][j].Dby*(Mesh[i][j+1].Ex-Mesh[i][j].Ex);
-            Mesh[i][j].update_Hz();
-			Mesh[i][j].update_src();
-            Mesh[i][j].Ex=Mesh[i][j].Cax*Mesh[i][j].Ex+Mesh[i][j].Cbx*(Mesh[i][j].Hz-Mesh[i][j-1].Hz);
-            Mesh[i][j].Ey=Mesh[i][j].Cay*Mesh[i][j].Ey-Mesh[i][j].Cby*(Mesh[i][j].Hz-Mesh[i-1][j].Hz);
+            Mesh[i*FDTDSIZE+j].Hx=Mesh[i*FDTDSIZE+j].Dax*Mesh[i*FDTDSIZE+j].Hx-Mesh[i*FDTDSIZE+j].Dbx*(Mesh[(i+1)*FDTDSIZE+j].Ey-Mesh[i*FDTDSIZE+j].Ey);
+            Mesh[i*FDTDSIZE+j].Hy=Mesh[i*FDTDSIZE+j].Day*Mesh[i*FDTDSIZE+j].Hy+Mesh[i*FDTDSIZE+j].Dby*(Mesh[i*FDTDSIZE+j+1].Ex-Mesh[i*FDTDSIZE+j].Ex);
+            Mesh[i*FDTDSIZE+j].update_Hz();
+			Mesh[i*FDTDSIZE+j].update_src();
+            Mesh[i*FDTDSIZE+j].Ex=Mesh[i*FDTDSIZE+j].Cax*Mesh[i*FDTDSIZE+j].Ex+Mesh[i*FDTDSIZE+j].Cbx*(Mesh[i*FDTDSIZE+j].Hz-Mesh[i*FDTDSIZE+j-1].Hz);
+            Mesh[i*FDTDSIZE+j].Ey=Mesh[i*FDTDSIZE+j].Cay*Mesh[i*FDTDSIZE+j].Ey-Mesh[i*FDTDSIZE+j].Cby*(Mesh[i*FDTDSIZE+j].Hz-Mesh[(i-1)*FDTDSIZE+j].Hz);
         }
     }
 }
-mesh** FDTD2DInit(double Ds, double Dt, int X, int Y){
-    mesh ** Mesh=new mesh*[X];
-    for(int i=0;i<X;i++){
-        Mesh[i]=new mesh[Y];
-    }
+mesh* FDTD2DInit(double Ds, double Dt, int X, int Y){
+    //mesh ** Mesh=new mesh*[X];
+    mesh * Mesh=new mesh[X*Y];
+    //for(int i=0;i<X;i++){
+    //    Mesh[i]=new mesh[Y];
+    //}
     set_mesh(Mesh,X,Y,Ds,Dt,D_CELL);
 //    for(int n=0;n<T;n++){
 //        update_TEz(Mesh,X,Y,n);
 //    }
     return Mesh;
 }
-void save_field(mesh** Mesh,int X, int Y, bool first){
+void save_field(mesh* Mesh,int X, int Y, bool first){
 	ofstream myfile;
 	if(first)
 		myfile.open("savefield.txt");
@@ -594,12 +595,12 @@ void save_field(mesh** Mesh,int X, int Y, bool first){
 		cout<<"fail to open"<<endl;
 	for(int j=Y;j<Y+savecolumns;j++){
 		for(int i=D_CELL;i<X-D_CELL;i++){
-			myfile<<(int)Mesh[i][j].m.type<<" "<<(int)Mesh[i][j].Srctype<<" "<<Mesh[i][j].Ex<<" "<<Mesh[i][j].Ey<<" "<<Mesh[i][j].Hx<<" "<<Mesh[i][j].Hy<<" "<<Mesh[i][j].sourceTimer<<" "<<Mesh[i][j].AccumSource<<endl;
+			myfile<<(int)Mesh[i*FDTDSIZE+j].m.type<<" "<<(int)Mesh[i*FDTDSIZE+j].Srctype<<" "<<Mesh[i*FDTDSIZE+j].Ex<<" "<<Mesh[i*FDTDSIZE+j].Ey<<" "<<Mesh[i*FDTDSIZE+j].Hx<<" "<<Mesh[i*FDTDSIZE+j].Hy<<" "<<Mesh[i*FDTDSIZE+j].sourceTimer<<" "<<Mesh[i*FDTDSIZE+j].AccumSource<<endl;
 		}
 	}
 	myfile.close();
 }
-void load_field(mesh** Mesh,int X, int Y){
+void load_field(mesh* Mesh,int X, int Y){
 	//clear_mesh(Mesh,X,Y);
 	ifstream myfile;
 	myfile.open("savefield.txt");
@@ -609,21 +610,21 @@ void load_field(mesh** Mesh,int X, int Y){
 		for(int i=D_CELL;i<Y-D_CELL;i++){
 			string buffer;
 			myfile>>buffer;
-			Mesh[i][j].set_material((matype)atoi(buffer.c_str()));
+			Mesh[i*FDTDSIZE+j].set_material((matype)atoi(buffer.c_str()));
 			myfile>>buffer;
-			Mesh[i][j].Srctype=(srctype)atoi(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].Srctype=(srctype)atoi(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].Ex=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].Ex=atof(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].Ey=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].Ey=atof(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].Hx=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].Hx=atof(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].Hy=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].Hy=atof(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].sourceTimer=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].sourceTimer=atof(buffer.c_str());
 			myfile>>buffer;
-			Mesh[i][j].AccumSource=atof(buffer.c_str());
+			Mesh[i*FDTDSIZE+j].AccumSource=atof(buffer.c_str());
 		}
 	}
 	myfile.close();
