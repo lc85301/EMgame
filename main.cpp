@@ -2,6 +2,11 @@
 #include<fstream>
 #include<string>
 #include <sstream>
+
+#include <sys/time.h>
+#include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
+
 #include "FDTD2D.h"
 #include "button.h"
 #define FDTDSIZE 290
@@ -10,6 +15,14 @@
 #define savecolumns 5
 //TODO money
 //TODO hard/soft/source
+//Yodalee add cuda function
+extern "C"
+void cudaUpdateKernel(mesh* d_m, int Nx, int Ny, double t);
+
+mesh* CUDAInit(int Nx, int Ny, mesh* h);
+void copyToDevice(mesh* h, mesh* d, size_t size);
+void copyFromDevice(mesh* h, mesh* d, size_t size);
+//Yodalee add cuda function
 using namespace std;
 enum brushStyle{Square,Circle,Line};
 enum wheelMode{bSize,MaxF};
@@ -25,6 +38,7 @@ SDL_Surface* InitialSetting(string,int,int,int);
 double source(int,int,double,bool);
 GLuint loadTexture( const std::string &fileName );
 bool sourceEnable=true;
+bool cudaEnable=false;
 int main(int argc,char* argv[]){
 	const int Matnum=4;
 	const int bStylenum=3;
@@ -42,6 +56,10 @@ int main(int argc,char* argv[]){
     SDL_Surface* surface=NULL;
     surface=InitialSetting("EMGame",500,700,FDTDSIZE);
     mesh* Mesh=FDTD2DInit(0.05,5e-11,FDTDSIZE,FDTDSIZE);
+	mesh* D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, Mesh);
+	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+	copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+
     bool isRunning=true;
     bool isDrag=false;
     int X,Y,Xi,Yi;
@@ -574,17 +592,77 @@ void update_TEz(mesh* Mesh,int X,int Y){
     }
 }
 mesh* FDTD2DInit(double Ds, double Dt, int X, int Y){
-    //mesh ** Mesh=new mesh*[X];
     mesh * Mesh=new mesh[X*Y];
-    //for(int i=0;i<X;i++){
-    //    Mesh[i]=new mesh[Y];
-    //}
     set_mesh(Mesh,X,Y,Ds,Dt,D_CELL);
-//    for(int n=0;n<T;n++){
-//        update_TEz(Mesh,X,Y,n);
-//    }
     return Mesh;
 }
+
+
+mesh* CUDAInit(int X, int Y, mesh* h){
+	timeval tv_start, tv_end;
+	long long unsigned totaltime;
+#if __linux__
+	gettimeofday(&tv_start, NULL);
+#endif
+	cudaError_t err = cudaSuccess;
+	size_t size = X*Y*sizeof(mesh);
+	mesh *d_m = NULL;
+	err = cudaMalloc((void **)&d_m, size);
+	if (err != cudaSuccess)
+	{
+		cerr << "Failed to allocate device memory (error code "<< cudaGetErrorString(err) << ")!\n";
+		exit(EXIT_FAILURE);
+	}
+#if __linux__
+	gettimeofday(&tv_end, NULL);
+	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
+	totaltime += tv_end.tv_usec - tv_start.tv_usec;
+	cout << "CPU total time to init memory is " <<  totaltime << " usec" << endl;
+#endif
+	return d_m;
+}
+
+void copyToDevice(mesh* h, mesh* d, size_t size){
+	cudaError_t err = cudaSuccess;
+	timeval tv_start, tv_end;
+	long long unsigned totaltime;
+#if __linux__
+	gettimeofday(&tv_start, NULL);
+#endif
+	err = cudaMemcpy(d, h, size, cudaMemcpyHostToDevice);
+	if (err != cudaSuccess)
+	{   
+		cerr << "Failed to copy memory to device (error code "<< cudaGetErrorString(err) << ")!\n";
+		exit(EXIT_FAILURE);
+	}   
+#if __linux__
+	gettimeofday(&tv_end, NULL);
+	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
+	totaltime += tv_end.tv_usec - tv_start.tv_usec;
+	cout << "CPU total time to copy memory from Host is " <<  totaltime << " usec" << endl;
+#endif
+}
+void copyFromDevice(mesh* h, mesh* d, size_t size){
+	cudaError_t err = cudaSuccess;
+	timeval tv_start, tv_end;
+	long long unsigned totaltime;
+#if __linux__
+	gettimeofday(&tv_start, NULL);
+#endif
+	err = cudaMemcpy(h, d, size, cudaMemcpyDeviceToHost);
+	if (err != cudaSuccess)
+	{   
+		cerr << "Failed to copy device memory (error code "<< cudaGetErrorString(err) << ")!\n";
+		exit(EXIT_FAILURE);
+	}   
+#if __linux__
+	gettimeofday(&tv_end, NULL);
+	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
+	totaltime += tv_end.tv_usec - tv_start.tv_usec;
+	cout << "CPU total time to copy memory to Host is " <<  totaltime << " usec" << endl;
+#endif
+}
+
 void save_field(mesh* Mesh,int X, int Y, bool first){
 	ofstream myfile;
 	if(first)

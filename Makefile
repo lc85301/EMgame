@@ -3,6 +3,7 @@
 # Setting time: 2013/04/30
 #==================================================
 .PHONY : clean run
+VPATH=library
 ver=debug
 
 #==================================================
@@ -36,8 +37,8 @@ endif
 #==================================================
 CC            = gcc
 CXX           = g++
-PRE_PROCESSOR = ${CC}
-LINKER        = ${CC}
+PRE_PROCESSOR = ${CXX}
+LINKER        = ${CXX}
 DEFINES       = 
 DEL_FILE      = rm -f
 DEL_DIR       = rm -rf
@@ -64,7 +65,7 @@ NVCC		= $(CUDA_BIN)/nvcc
 ifeq ($(ver),debug)
 	CFLAGS   = -O1 -g3 -Wall -Ddebug -pthread ${DEFINES} 
 	CXXFLAGS = -O1 -g3 -Wall -Ddebug ${DEFINES} 
-	LIBS     = -L. -lncurses -pthread -lSDL -lSDL_gfx -lcuda -lcudart -L$(CUDA_LIB)
+	LIBS     = -L. -lncurses -pthread -lSDL -lSDL_gfx -lSDL_ttf -lGL -lcuda -lcudart -L$(CUDA_LIB)
 	INCLUDE  = -I. `sdl-config --cflags --libs` -I$(CUDA_INC)
 else
 	CFLAGS   = -O3 -Wall -pthread ${DEFINES} 
@@ -94,9 +95,6 @@ OBJECT_FILE += $(addsuffix .o, $(basename $(SOURCE_FILE))) solver.o
 	$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDE)
 	@$(MOVE) $@ $(LIBRARY_DIR)
 
-solver.o: solver.cu
-	$(NVCC) -c $< -o $@ $(CULDFLAGS) $(CUINCLUDE)
-
 #==================================================
 # Compile rules
 #==================================================
@@ -110,6 +108,10 @@ $(TARGET): $(OBJECT_FILE) solver.cu
 	cd $(LIBRARY_DIR); \
 	$(LINKER) -o $@ $(OBJECT_FILE) $(LIBS); \
 	cd ..
+
+solver.o: solver.cu
+	$(NVCC) -c $< -o $@ $(CULDFLAGS) $(CUINCLUDE)
+	@$(MOVE) $@ $(LIBRARY_DIR)
 
 run: 
 	./$(BIN_DIR)/$(TARGET) $(ARG)
