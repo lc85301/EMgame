@@ -3,7 +3,6 @@
 # Setting time: 2013/04/30
 #==================================================
 .PHONY : clean run
-VPATH=library/
 ver=debug
 
 #==================================================
@@ -37,8 +36,8 @@ endif
 #==================================================
 CC            = gcc
 CXX           = g++
-PRE_PROCESSOR = ${CXX}
-LINKER        = ${CXX}
+PRE_PROCESSOR = ${CC}
+LINKER        = ${CC}
 DEFINES       = 
 DEL_FILE      = rm -f
 DEL_DIR       = rm -rf
@@ -49,13 +48,24 @@ STDIN         =
 SHELL         = /bin/sh
 
 #==================================================
+# CUDA related
+#==================================================
+CUDA_PATH	?= /opt/cuda
+CUDA_LIB	?= $(CUDA_PATH)/lib
+CUDA_INC	?= $(CUDA_PATH)/include
+CUDA_BIN	?= $(CUDA_PATH)/bin
+CULDFLAGS   = -m32 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
+NVCC		= $(CUDA_BIN)/nvcc
+
+#==================================================
 # Flag Define -- build version dependant
 #==================================================
+
 ifeq ($(ver),debug)
-	CFLAGS   = -O1 -g3 -Wall -Ddebug ${DEFINES} 
-	CXXFLAGS = -O1 -g3 -Wall -Ddebug -lm ${DEFINES}  
-	LIBS     = -L. -lncurses -pthread -lSDL -lSDL_gfx -lGL -lSDL_ttf
-	INCLUDE  = -I. `sdl-config --libs --cflags`
+	CFLAGS   = -O1 -g3 -Wall -Ddebug -pthread ${DEFINES} 
+	CXXFLAGS = -O1 -g3 -Wall -Ddebug ${DEFINES} 
+	LIBS     = -L. -lncurses -pthread -lSDL -lSDL_gfx -lcuda -lcudart -L$(CUDA_LIB)
+	INCLUDE  = -I. `sdl-config --cflags --libs` -I$(CUDA_INC)
 else
 	CFLAGS   = -O3 -Wall -pthread ${DEFINES} 
 	CXXFLAGS = -O3 -Wall ${DEFINES} 
@@ -70,7 +80,7 @@ TARGET = FDTD
 BIN_DIR     = bin
 LIBRARY_DIR = library
 SOURCE_FILE = SDL_gfxPrimitives.c FDTD2D.cpp main.cpp
-OBJECT_FILE += $(addsuffix .o, $(basename $(SOURCE_FILE)))
+OBJECT_FILE += $(addsuffix .o, $(basename $(SOURCE_FILE))) solver.o
 
 #==================================================
 # Compile implicit rules.
@@ -84,6 +94,9 @@ OBJECT_FILE += $(addsuffix .o, $(basename $(SOURCE_FILE)))
 	$(CXX) -c $< -o $@ $(CXXFLAGS) $(INCLUDE)
 	@$(MOVE) $@ $(LIBRARY_DIR)
 
+solver.o: solver.cu
+	$(NVCC) -c $< -o $@ $(CULDFLAGS) $(CUINCLUDE)
+
 #==================================================
 # Compile rules
 #==================================================
@@ -93,9 +106,9 @@ default: new_dir $(TARGET)
 new_dir:
 	$(MKDIR) $(LIBRARY_DIR) $(BIN_DIR)
 
-$(TARGET): $(OBJECT_FILE)
+$(TARGET): $(OBJECT_FILE) solver.cu
 	cd $(LIBRARY_DIR); \
-	$(LINKER) -o ../$(BIN_DIR)/$@ $(OBJECT_FILE) $(LIBS); \
+	$(LINKER) -o $@ $(OBJECT_FILE) $(LIBS); \
 	cd ..
 
 run: 
