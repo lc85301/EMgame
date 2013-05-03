@@ -111,11 +111,15 @@ void mesh::set_material(matype type){
         update_D();
         Ex=0;
         Ey=0;
-        Ez=0;
+        Hx=0;
+        Hy=0;
+        Hz=0;
         break;
     case PMC:
         Dax=-1;Day=-1;Dbx=0;Dby=0;
         update_C();
+        Ex=0;
+        Ey=0;
         Hx=0;
         Hy=0;
         Hz=0;
@@ -126,7 +130,6 @@ void mesh::set_material(matype type){
 	case Glass:
 		set_material(mu_0,3.5*epsilon_0,0,0);
 		break;
-
     }
 }
 void mesh::set_size(double Ds, double Dt){
@@ -150,7 +153,9 @@ void mesh::update_D(){
 void mesh::update_Ez(){
     Ez=Ex+Ey;
 }
-void mesh::update_Hz(){ Hz=Hx+Hy; }
+void mesh::update_Hz(){
+    Hz=Hx+Hy;
+}
 float* mesh::matcolor(){
     float color[4];
     switch(m.type){
@@ -185,10 +190,10 @@ double mesh::Hsource(double t){
     double sigma=10;
 	switch(Srctype){
 	case Sin:
-		return sin((t*1e-2*2*3.14));
+		return (t>0)?atan(t/20)*sin((t*1e-2*2*3.14)):0;
 		break;
 	case Pulse:
-		return exp(-0.5*(t-3*sigma)*(t-3*sigma)/(sigma*sigma));
+		return (t>0)?exp(-0.5*(t-3*sigma)*(t-3*sigma)/(sigma*sigma)):0;
 		break;
 	case None:
 		return 0;
@@ -196,7 +201,10 @@ double mesh::Hsource(double t){
 	}
 }
 void mesh::update_src(){
-    AccumSource+=Hsource(sourceTimer);
-    Hz-=AccumSource;
+    AccumSource+=Hsource(sourceTimer);//(Cbx*Dby+Cby*Dbx)*AccumSource;
+    Hz+=AccumSource;
+//Hz+=Hsource(sourceTimer)+2*(Cbx*Dby+Cby*Dbx)*Hsource(sourceTimer-1);
+//	if(Srctype!=None)
+//		Hz=Hsource(sourceTimer);
     sourceTimer=(Srctype==None)?0:sourceTimer+1;
 }
