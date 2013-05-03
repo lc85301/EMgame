@@ -156,7 +156,7 @@ void mesh::update_Hz(){
     Hz=Hx+Hy;
 }
 float* mesh::matcolor(){
-    float color[4];
+    float* color = new float[4];
     switch(m.type){
     case PEC:
         color[0]=0.7;

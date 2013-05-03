@@ -40,7 +40,7 @@ SDL_Surface* InitialSetting(string,int,int,int);
 double source(int,int,double,bool);
 GLuint loadTexture( const std::string &fileName );
 bool sourceEnable=true;
-bool cudaEnable=true;
+bool cudaEnable=false;
 int main(int argc,char* argv[]){
 	const int Matnum=4;
 	const int bStylenum=3;
@@ -359,6 +359,7 @@ int main(int argc,char* argv[]){
                     float* color=Mesh[i*FDTDSIZE+j].matcolor();
                     glColor4f(color[0],color[1],color[2],color[3]);
                     glVertex2f( (i+0.5-D_CELL)*RATIO,(j+0.5-D_CELL)*RATIO );
+					delete []color;
                 }
             }
 		glEnd();
@@ -655,7 +656,7 @@ void reset_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].reset();
         }
     }
-	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
+	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 }
 void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
@@ -663,7 +664,7 @@ void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].clearall();
         }
     }
-	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
+	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 }
 void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
