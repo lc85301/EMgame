@@ -2,6 +2,11 @@
 #include<fstream>
 #include<string>
 #include <sstream>
+
+#include <sys/time.h>
+#include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
+
 #include <deque>
 #include "FDTD2D.h"
 #include "button.h"
@@ -12,7 +17,6 @@
 //TODO money
 //TODO hard/soft/source
 //Yodalee add cuda function
-//To merge
 extern "C"
 void cudaUpdateKernel(mesh* d_m, int Nx, int Ny);
 
@@ -57,9 +61,8 @@ int main(int argc,char* argv[]){
 
 	mesh* D_Mesh;
 	if (cudaEnable) {
-		D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, Mesh);
-		copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
-		copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+		D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, D_Mesh);
+		copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
 	}
 
     bool isRunning=true;
@@ -236,7 +239,6 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL)
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
@@ -245,7 +247,6 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
@@ -261,7 +262,6 @@ int main(int argc,char* argv[]){
 								for(int j=Starty-brushsize;j<Starty+brushsize;j++){
 									if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 									Mesh[i*FDTDSIZE+j].set_material(currentMat);
-									if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 								}
 							}
 						}else{
@@ -269,7 +269,6 @@ int main(int argc,char* argv[]){
 								for(int j=min(Starty,Endy)-brushsize;j<max(Starty,Endy)+brushsize;j++){
 									if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 									Mesh[i*FDTDSIZE+j].set_material(currentMat);
-									if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 								}
 							}
 						}
@@ -281,13 +280,11 @@ int main(int argc,char* argv[]){
 						for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
 							Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}else{
 						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 							if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 							Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 				}else{
@@ -295,7 +292,6 @@ int main(int argc,char* argv[]){
 						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 							Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 				}
@@ -336,7 +332,11 @@ int main(int argc,char* argv[]){
         else if(!isPause){
 			if (!cudaEnable) {
 				update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
-            update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
+			} else {
+				//copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
+				cudaUpdateKernel(D_Mesh, FDTDSIZE, FDTDSIZE);
+				copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
+			}
         }
         if(Monitorvalue.size()==250){
 			Monitorvalue.pop_back();
@@ -650,7 +650,6 @@ void reset_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].reset();
         }
     }
-	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
@@ -658,7 +657,6 @@ void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].clearall();
         }
     }
-	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
@@ -685,16 +683,16 @@ mesh* FDTD2DInit(double Ds, double Dt, int X, int Y){
     return Mesh;
 }
 
-
-mesh* CUDAInit(int X, int Y, mesh* h){
+mesh* CUDAInit(int X, int Y, mesh* d_m){
+	cudaError_t err = cudaSuccess;
 	timeval tv_start, tv_end;
 	long long unsigned totaltime;
 #if __linux__
 	gettimeofday(&tv_start, NULL);
 #endif
-	cudaError_t err = cudaSuccess;
 	size_t size = X*Y*sizeof(mesh);
-	mesh *d_m = NULL;
+	//mesh *d_m = NULL;
+	d_m = NULL;
 	err = cudaMalloc((void **)&d_m, size);
 	if (err != cudaSuccess)
 	{
