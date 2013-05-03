@@ -15,6 +15,7 @@ Hsource(int type, double t){
 		return 0;
 		break;
 	}
+	return 100;
 }
 
 //H

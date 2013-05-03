@@ -239,6 +239,7 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL)
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 						}
 					}
 					break;
@@ -247,6 +248,7 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 						}
 					}
 					break;
@@ -280,11 +282,13 @@ int main(int argc,char* argv[]){
 						for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
 							Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 						}
 					}else{
 						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 							if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 							Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 						}
 					}
 				}else{
@@ -292,6 +296,7 @@ int main(int argc,char* argv[]){
 						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 							Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh)); }
 						}
 					}
 				}
@@ -650,6 +655,7 @@ void reset_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].reset();
         }
     }
+	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
 }
 void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
@@ -657,6 +663,7 @@ void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
             Mesh[i*FDTDSIZE+j].clearall();
         }
     }
+	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
 }
 void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
@@ -802,5 +809,6 @@ void load_field(mesh* Mesh,mesh* D_Mesh, int X, int Y){
 		}
 	}
 	myfile.close();
+	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE*sizeof(mesh));
 }
 

@@ -69,14 +69,12 @@ NVCC		= $(CUDA_BIN)/nvcc
 ifeq ($(ver),debug)
 	CFLAGS   = -O1 -g3 -Wall -Ddebug -pthread ${DEFINES} 
 	CXXFLAGS = -O1 -g3 -Wall -Ddebug ${DEFINES} 
-	LIBS     = -L. -lncurses -pthread -lSDL -lSDL_gfx -lSDL_ttf -lGL -lcuda -lcudart -L$(CUDA_LIB)
-	INCLUDE  = -I. `sdl-config --cflags --libs` -I$(CUDA_INC)
 else
 	CFLAGS   = -O3 -Wall -pthread ${DEFINES} 
 	CXXFLAGS = -O3 -Wall ${DEFINES} 
-	LIBS     = -L. -lncurses -pthread
-	INCLUDE  = -I.
 endif
+LIBS     = -L. -L$(CUDA_LIB) -lncurses -pthread -lSDL -lSDL_gfx -lSDL_ttf -lGL -lcuda -lcudart
+INCLUDE  = -I. `sdl-config --cflags --libs` -I$(CUDA_INC)
 
 #==================================================
 # Source, library, bin Define
