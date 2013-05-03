@@ -2,20 +2,20 @@
 
 #define sigma 10
 
-//__device__ double
-//Hsource(int type, double t){
-//	switch(type){
-//	case Sin:
-//		return (t>0)?atan(t/20)*sin((t*1e-2*2*3.14)):0;
-//		break;
-//	case Pulse:
-//		return (t>0)?exp(-0.5*(t-3*sigma)*(t-3*sigma)/(sigma*sigma)):0;
-//		break;
-//	case None:
-//		return 0;
-//		break;
-//	}
-//}
+__device__ double
+Hsource(int type, double t){
+	switch(type){
+	case Sin:
+		return (t>0)?atan(t/20)*sin((t*1e-2*2*3.14)):0;
+		break;
+	case Pulse:
+		return (t>0)?exp(-0.5*(t-3*sigma)*(t-3*sigma)/(sigma*sigma)):0;
+		break;
+	case None:
+		return 0;
+		break;
+	}
+}
 
 //H
 __global__ void

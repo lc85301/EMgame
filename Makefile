@@ -52,10 +52,14 @@ SHELL         = /bin/sh
 # CUDA related
 #==================================================
 CUDA_PATH	?= /opt/cuda
-CUDA_LIB	?= $(CUDA_PATH)/lib
+ifeq ($(OS_SIZE), 32)
+	CUDA_LIB	?= $(CUDA_PATH)/lib
+else
+	CUDA_LIB	?= $(CUDA_PATH)/lib64
+endif
 CUDA_INC	?= $(CUDA_PATH)/include
 CUDA_BIN	?= $(CUDA_PATH)/bin
-CULDFLAGS   = -m32 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
+CULDFLAGS   = $(mflags) -gencode arch=compute_30,code=sm_30 -gencode arch=compute_35,code=sm_35
 NVCC		= $(CUDA_BIN)/nvcc
 
 #==================================================
@@ -108,6 +112,7 @@ $(TARGET): $(OBJECT_FILE) solver.cu
 	cd $(LIBRARY_DIR); \
 	$(LINKER) -o $@ $(OBJECT_FILE) $(LIBS); \
 	cd ..
+	@$(MOVE) $(LIBRARY_DIR)/$@ $(BIN_DIR)
 
 solver.o: solver.cu
 	$(NVCC) -c $< -o $@ $(CULDFLAGS) $(CUINCLUDE)
