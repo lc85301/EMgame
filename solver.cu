@@ -1,24 +1,30 @@
 #include "FDTD2D.h"
+#include <stdio.h>
+
+#define sigma 10
 
 __device__ double
-Hsource(mesh* m, double t){
-    double sigma=10;
+Hsource(mesh* m){
+    //double sigma=10;
+	double t = m->sourceTimer;
 	switch(m->Srctype){
-	case 0:
+	case Sin:
 		return sin((t*1e-2*2*3.14));
 		break;
-	case 1: 
+	case Pulse: 
 		return exp(-0.5*(t-3*sigma)*(t-3*sigma)/(sigma*sigma));
 		break;
-	case 2:
+	case None:
 		return 0;
 		break;
 	}
 }
 __device__ void 
-source(mesh *m){
-    m->AccumSource+=Hsource(m, m->sourceTimer);
-    m->Hz-=m->AccumSource;
+source(mesh *m, double a){
+    //m->AccumSource+=Hsource(m, m->sourceTimer);
+    m->AccumSource+=a;
+    //m->Hz-=m->AccumSource;
+    m->Hz=10;
     m->sourceTimer=(m->Srctype==None)?0:m->sourceTimer+1;
 }
 
@@ -57,15 +63,16 @@ updateSource(mesh *m, int W, int H){
 	int idy = blockIdx.y * blockDim.y + threadIdx.y;
 	int k = idy*W+idx;
 	if(idx<W-1 && idx > 1 && idy > 1 && idy<H-1){
-		source(&m[k]);
-		//m[k].update_src();
+		m[k].Hz = 100;
+		//double a = Hsource(&m[k]);
+		//source(&m[k], a);
 	}
 }
 
 #define BLOCKSIZ 128
 
 extern "C"
-void cudaUpdateKernel(mesh* d_m, int Nx, int Ny, double t){
+void cudaUpdateKernel(mesh* d_m, int Nx, int Ny){
 	dim3 dimBlock(BLOCKSIZ,BLOCKSIZ);
 	dim3 dimGrid(ceil(Nx/BLOCKSIZ), ceil(Ny/BLOCKSIZ));
 	updateH<<<dimGrid, dimBlock>>>(d_m, Nx, Ny);
