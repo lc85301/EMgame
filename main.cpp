@@ -16,6 +16,7 @@
 //TODO money
 //TODO hard/soft/source
 //Yodalee add cuda function
+//To merge
 extern "C"
 void cudaUpdateKernel(mesh* d_m, int Nx, int Ny);
 
