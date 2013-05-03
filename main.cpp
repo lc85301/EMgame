@@ -2,11 +2,7 @@
 #include<fstream>
 #include<string>
 #include <sstream>
-
-#include <sys/time.h>
-#include <cuda_runtime.h>
-#include <cuda_profiler_api.h>
-
+#include <deque>
 #include "FDTD2D.h"
 #include "button.h"
 #define FDTDSIZE 290
@@ -15,31 +11,21 @@
 #define savecolumns 5
 //TODO money
 //TODO hard/soft/source
-//Yodalee add cuda function
-extern "C"
-void cudaUpdateKernel(mesh* d_m, int Nx, int Ny);
-
-mesh* CUDAInit(int Nx, int Ny, mesh* h);
-void freeCUDA(mesh* d);
-void copyToDevice(mesh* h, mesh* d, size_t size);
-void copyFromDevice(mesh* h, mesh* d, size_t size);
-//Yodalee add cuda function
 using namespace std;
 enum brushStyle{Square,Circle,Line};
 enum wheelMode{bSize,MaxF};
 enum fieldType{Ex,Ey,Hz};
 void set_mesh(mesh* Mesh,int X,int Y,double Ds, double d_cell);
-void reset_mesh(mesh* Mesh, mesh* D_Mesh, int X,int Y);
-void clear_mesh(mesh* Mesh, mesh* D_Mesh, int X,int Y);
+void reset_mesh(mesh* Mesh, int X,int Y);
+void clear_mesh(mesh* Mesh, int X,int Y);
 void save_field(mesh*,int,int,bool);
-void load_field(mesh*, mesh* D_Mesh,int,int);
+void load_field(mesh*,int,int);
 mesh* FDTD2DInit(double, double, int, int);
 void update_TEz(mesh* Mesh,int X,int Y);
 SDL_Surface* InitialSetting(string,int,int,int);
 double source(int,int,double,bool);
 GLuint loadTexture( const std::string &fileName );
 bool sourceEnable=true;
-bool cudaEnable=true;
 int main(int argc,char* argv[]){
 	const int Matnum=4;
 	const int bStylenum=3;
@@ -55,16 +41,8 @@ int main(int argc,char* argv[]){
 	const float MatG[Matnum]={0,0.7,0.3,0.1};
 	const float MatB[Matnum]={0,0.7,0.3,0.1};
     SDL_Surface* surface=NULL;
-    surface=InitialSetting("EMGame",500,700,FDTDSIZE);
-    mesh* Mesh=FDTD2DInit(0.05,5e-11,FDTDSIZE,FDTDSIZE);
-
-	mesh* D_Mesh;
-	if (cudaEnable) {
-		D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, Mesh);
-		copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
-		copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
-	}
-
+    surface=InitialSetting("EMEMU",500,700,FDTDSIZE);
+    mesh* Mesh=FDTD2DInit(0.025,5e-11,FDTDSIZE,FDTDSIZE);
     bool isRunning=true;
     bool isDrag=false;
     int X,Y,Xi,Yi;
@@ -77,6 +55,9 @@ int main(int argc,char* argv[]){
     bool isClear=false;
     bool isSave=false;
     bool isLoad=false;
+    bool isMonitor=false;
+    int MonitorX=0;
+    int MonitorY=0;
     int Startx,Starty;
     int Endx,Endy;
     int saveY=D_CELL;
@@ -93,6 +74,8 @@ int main(int argc,char* argv[]){
     button Srcv[Srcnum];
     button wModev[wModenum];
     button fTypev[fTypenum];
+    button Monitor;
+    deque<mesh> Monitorvalue;
     for(int i=0;i<Matnum;i++){
 		Matv[i].button_set(buttonMidx,buttonMidy+16*i,Matname[i],MatR[i],MatG[i],MatB[i]);
     }
@@ -108,6 +91,7 @@ int main(int argc,char* argv[]){
     for(int i=0;i<fTypenum;i++){
 		fTypev[i].button_set(buttonMidx+400,buttonMidy+16*(i+4),fTypename[i]);
     }
+    Monitor.button_set(buttonMidx,buttonMidy+16*9,"Monitor");
     while(isRunning){
         while(SDL_PollEvent(&event)){
             if(event.type==SDL_QUIT)
@@ -142,6 +126,9 @@ int main(int argc,char* argv[]){
 						if(fTypev[i].isHit(Xi,Yi)){
 							currentfType=(fieldType)i;
 						}
+					}
+					if(Monitor.isHit(Xi,Yi)){
+						isMonitor=true;
 					}
                     X=D_CELL+event.button.x*(FDTDSIZE-2*D_CELL)/500;
                     Y=D_CELL+event.button.y*(FDTDSIZE-2*D_CELL)/500;
@@ -220,90 +207,89 @@ int main(int argc,char* argv[]){
                 }
             }
         }
-        if(isDrag&&!isSave){
+        if(isDrag&&!isSave&&!isMonitor){
             if(isRight){
-//				Mesh[X][Y].Srctype=currentSrc;
-//				cout<<X<<","<<Y<<","<<(int)currentSrc<<endl;
-//				Mesh[X][Y].sourceTimer=0;
-			}else if(Xi>0&&Xi<500&&Yi>0&&Yi<500){
+
+			}else if(Xi>=0&&Xi<500&&Yi>=0&&Yi<500){
             	switch(currentbStyle){
 				case Square:
 					for(int i=X-brushsize;i<X+brushsize;i++){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
-							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
+							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL)
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
 				case Circle:
 					for(int i=X-brushsize;i<X+brushsize;i++){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
-							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
+							if(i>=D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>=D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
-							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
             	}
             }
-        }else if(!isRight&&!isSave){
-        	if(Xi>0&&Xi<500&&Yi>0&&Yi<500){
-				if(isRelease&&currentbStyle==Line){
-					if(abs(Endx-Startx)>abs(Endy-Starty)){
-						for(int i=min(Startx,Endx)-brushsize;i<max(Startx,Endx)+brushsize;i++){
-							for(int j=Starty-brushsize;j<Starty+brushsize;j++){
-								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-								Mesh[i*FDTDSIZE+j].set_material(currentMat);
-								if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
+        }
+        if(isRelease&&!isSave){
+			if(!isRight&&!isMonitor){
+				if(Xi>0&&Xi<500&&Yi>0&&Yi<500){
+					if(isRelease&&currentbStyle==Line){
+						if(abs(Endx-Startx)>abs(Endy-Starty)){
+							for(int i=min(Startx,Endx)-brushsize;i<max(Startx,Endx)+brushsize;i++){
+								for(int j=Starty-brushsize;j<Starty+brushsize;j++){
+									if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
+									Mesh[i*FDTDSIZE+j].set_material(currentMat);
+								}
 							}
+						}else{
+							for(int i=Startx-brushsize;i<Startx+brushsize;i++){
+								for(int j=min(Starty,Endy)-brushsize;j<max(Starty,Endy)+brushsize;j++){
+									if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
+									Mesh[i*FDTDSIZE+j].set_material(currentMat);
+								}
+							}
+						}
+					}
+				}
+			}else if(!isMonitor){
+				if(currentSrc!=None){
+					if(abs(Endx-Startx)>abs(Endy-Starty)){
+						for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
+							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
+							Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
 						}
 					}else{
-						for(int i=Startx-brushsize;i<Startx+brushsize;i++){
-							for(int j=min(Starty,Endy)-brushsize;j<max(Starty,Endy)+brushsize;j++){
-								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-								Mesh[i*FDTDSIZE+j].set_material(currentMat);
-								if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
-							}
+						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
+							if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
+							Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
+						}
+					}
+				}else{
+					for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
+						for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
+							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
+							Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
 						}
 					}
 				}
-        	}
+				isRight=false;
+			}else if(isMonitor&&isRight){
+				MonitorX=X;
+				MonitorY=Y;
+				isRelease=false;
+				isRight=false;
+				isMonitor=false;
+			}
 			isRelease=false;
-        }else if(!isSave){
-			if(currentSrc!=None){
-				if(abs(Endx-Startx)>abs(Endy-Starty)){
-					for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
-						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
-						Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
-						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
-					}
-				}else{
-					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
-						if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-						Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
-						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
-					}
-				}
-        	}else{
-				for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
-					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
-						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
-						Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
-						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
-					}
-				}
-        	}
-			isRelease=false;
-			isRight=false;
-		}
+        }
         if(isReset){
-            reset_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
+            reset_mesh(Mesh,FDTDSIZE,FDTDSIZE);
             isReset=false;
         }
         if(isClear){
-            reset_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
-            clear_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
+            reset_mesh(Mesh,FDTDSIZE,FDTDSIZE);
+            clear_mesh(Mesh,FDTDSIZE,FDTDSIZE);
             isClear=false;
         }
         if(isSave){
@@ -318,17 +304,16 @@ int main(int argc,char* argv[]){
 				saveY+=savecolumns;
 			}
         }else if(isLoad){
-			load_field(Mesh, D_Mesh,FDTDSIZE,FDTDSIZE);
+			load_field(Mesh,FDTDSIZE,FDTDSIZE);
 			isLoad=false;
         }
         else if(!isPause){
-			if (!cudaEnable) {
-				update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
-			} else {
-				cudaUpdateKernel(D_Mesh, FDTDSIZE, FDTDSIZE);
-				copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
-			}
+            update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
         }
+        if(Monitorvalue.size()==250){
+			Monitorvalue.pop_back();
+        }
+        Monitorvalue.push_front(Mesh[MonitorX*FDTDSIZE+MonitorY]);
         //rendering
         glClear(GL_COLOR_BUFFER_BIT);
         glPointSize(ceil(500.0/(FDTDSIZE-2*D_CELL)));
@@ -343,6 +328,15 @@ int main(int argc,char* argv[]){
                     glVertex2f( (i+0.5-D_CELL)*RATIO,(j+0.5-D_CELL)*RATIO );
                 }
             }
+		glEnd();
+		glBegin(GL_LINES);
+			glColor4f(0,1,0,1);
+			glVertex2f((MonitorX-2+0.5-D_CELL)*RATIO,(MonitorY-2+0.5-D_CELL)*RATIO);
+			glVertex2f((MonitorX+2+0.5-D_CELL)*RATIO,(MonitorY+2+0.5-D_CELL)*RATIO);
+			glVertex2f((MonitorX+2+0.5-D_CELL)*RATIO,(MonitorY-2+0.5-D_CELL)*RATIO);
+			glVertex2f((MonitorX-2+0.5-D_CELL)*RATIO,(MonitorY+2+0.5-D_CELL)*RATIO);
+		glEnd();
+        glBegin( GL_POINTS );
         //Drawing fields
             for ( int i = D_CELL; i < FDTDSIZE-D_CELL+1; ++i ){
                 for(int j=D_CELL;j<FDTDSIZE-D_CELL+1;j++){
@@ -368,7 +362,15 @@ int main(int argc,char* argv[]){
         glEnd();
         //Drawing Cursor
         if(Xi>0&&Xi<500&&Yi>0&&Yi<500){
-			if(!isRight){
+			if(isMonitor){
+				glBegin(GL_LINES);
+				glColor4f(1,0,0,1);
+				glVertex2f((X-2+0.5-D_CELL)*RATIO,(Y+0.5-D_CELL)*RATIO);
+				glVertex2f((X+2+0.5-D_CELL)*RATIO,(Y+0.5-D_CELL)*RATIO);
+				glVertex2f((X+0.5-D_CELL)*RATIO,(Y-2+0.5-D_CELL)*RATIO);
+				glVertex2f((X+0.5-D_CELL)*RATIO,(Y+2+0.5-D_CELL)*RATIO);
+				glEnd();
+			}else if(!isRight){
 				switch(currentbStyle){
 				case Square:
 					glBegin(GL_LINE_LOOP);
@@ -466,6 +468,7 @@ int main(int argc,char* argv[]){
 		for(int i=0;i<fTypenum;i++){
 			fTypev[i].draw();
 		}
+		Monitor.draw();
 		ostringstream s;
 		s.precision(1);
 		s<<scientific<<Maxfield;
@@ -505,6 +508,37 @@ int main(int argc,char* argv[]){
         glVertex2f(fTypev[(int)currentfType].X+2-offset,fTypev[(int)currentfType].Y+2);
         glVertex2f(fTypev[(int)currentfType].X+2-offset,fTypev[(int)currentfType].Y-2);
         glEnd();
+		glBegin(GL_QUADS);
+        glColor4f(0.0,0,0,1);
+        glVertex2f(buttonMidx+100,570);
+        glVertex2f(buttonMidx+100,670);
+        glVertex2f(buttonMidx+350,670);
+        glVertex2f(buttonMidx+350,570);
+		glEnd();
+
+        glBegin(GL_LINE_STRIP);
+        glColor4f(0,1.0,0,1);
+        for(int i=0;i<Monitorvalue.size();i++){
+			double y;
+			switch(currentfType){
+			case Ex:
+				y=Monitorvalue[i].Ex*50.0/Maxfield;
+				y=(y>50)?50:(y<-50)?-50:y;
+				break;
+			case Ey:
+				y=Monitorvalue[i].Ey*50.0/Maxfield;
+				y=(y>50)?50:(y<-50)?-50:y;
+				break;
+			case Hz:
+				y=Monitorvalue[i].Hz*eta_0*50.0/Maxfield;
+				y=(y>50)?50:(y<-50)?-50:y;
+				break;
+			}
+			glVertex2f(100+buttonMidx+i,620+y);
+        }
+        glEnd();
+
+
         glPopMatrix();
         SDL_GL_SwapBuffers();
     }
@@ -582,21 +616,19 @@ void set_mesh(mesh* Mesh,int X,int Y,double Ds, double Dt,double d_cell){
     }
     cout<<"Mesh Initialized\n";
 }
-void reset_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
+void reset_mesh(mesh* Mesh,int X, int Y){
     for(int i=0;i<X;i++){
         for(int j=0;j<Y;j++){
             Mesh[i*FDTDSIZE+j].reset();
         }
     }
-	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
-void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
+void clear_mesh(mesh* Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
         for(int j=D_CELL;j<Y-D_CELL;j++){
             Mesh[i*FDTDSIZE+j].clearall();
         }
     }
-	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
@@ -611,87 +643,17 @@ void update_TEz(mesh* Mesh,int X,int Y){
     }
 }
 mesh* FDTD2DInit(double Ds, double Dt, int X, int Y){
+    //mesh ** Mesh=new mesh*[X];
     mesh * Mesh=new mesh[X*Y];
+    //for(int i=0;i<X;i++){
+    //    Mesh[i]=new mesh[Y];
+    //}
     set_mesh(Mesh,X,Y,Ds,Dt,D_CELL);
+//    for(int n=0;n<T;n++){
+//        update_TEz(Mesh,X,Y,n);
+//    }
     return Mesh;
 }
-
-
-mesh* CUDAInit(int X, int Y, mesh* h){
-	timeval tv_start, tv_end;
-	long long unsigned totaltime;
-#if __linux__
-	gettimeofday(&tv_start, NULL);
-#endif
-	cudaError_t err = cudaSuccess;
-	size_t size = X*Y*sizeof(mesh);
-	mesh *d_m = NULL;
-	err = cudaMalloc((void **)&d_m, size);
-	if (err != cudaSuccess)
-	{
-		cerr << "Failed to allocate device memory (error code "<< cudaGetErrorString(err) << ")!\n";
-		exit(EXIT_FAILURE);
-	}
-#if __linux__
-	gettimeofday(&tv_end, NULL);
-	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
-	totaltime += tv_end.tv_usec - tv_start.tv_usec;
-	cout << "CPU total time to init memory is " <<  totaltime << " usec" << endl;
-#endif
-	return d_m;
-}
-
-void freeCUDA(mesh* d){
-	cudaError_t err = cudaSuccess;
-	err = cudaFree(d);
-	if (err != cudaSuccess)
-	{
-		fprintf(stderr, "Failed to free device mesh (error code %s)!\n", cudaGetErrorString(err));
-		exit(EXIT_FAILURE);
-	}
-}
-
-void copyToDevice(mesh* h, mesh* d, size_t size){
-	cudaError_t err = cudaSuccess;
-	timeval tv_start, tv_end;
-	long long unsigned totaltime;
-#if __linux__
-	gettimeofday(&tv_start, NULL);
-#endif
-	err = cudaMemcpy(d, h, size, cudaMemcpyHostToDevice);
-	if (err != cudaSuccess)
-	{   
-		cerr << "Failed to copy memory to device (error code "<< cudaGetErrorString(err) << ")!\n";
-		exit(EXIT_FAILURE);
-	}   
-#if __linux__
-	gettimeofday(&tv_end, NULL);
-	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
-	totaltime += tv_end.tv_usec - tv_start.tv_usec;
-	cout << "CPU total time to copy memory from Host is " <<  totaltime << " usec" << endl;
-#endif
-}
-void copyFromDevice(mesh* h, mesh* d, size_t size){
-	cudaError_t err = cudaSuccess;
-	timeval tv_start, tv_end;
-	long long unsigned totaltime;
-#if __linux__
-	gettimeofday(&tv_start, NULL);
-#endif
-	err = cudaMemcpy(h, d, size, cudaMemcpyDeviceToHost);
-	if (err != cudaSuccess)
-	{   
-		cerr << "Failed to copy device memory (error code "<< cudaGetErrorString(err) << ")!\n";
-		exit(EXIT_FAILURE);
-	}   
-#if __linux__
-	gettimeofday(&tv_end, NULL);
-	totaltime = 1000000u * (tv_end.tv_sec - tv_start.tv_sec);
-	totaltime += tv_end.tv_usec - tv_start.tv_usec;
-	cout << "CPU total time to copy memory to Host is " <<  totaltime << " usec" << endl;
-#endif
-}
-
 void save_field(mesh* Mesh,int X, int Y, bool first){
 	ofstream myfile;
 	if(first)
@@ -707,7 +669,7 @@ void save_field(mesh* Mesh,int X, int Y, bool first){
 	}
 	myfile.close();
 }
-void load_field(mesh* Mesh,mesh* D_Mesh, int X, int Y){
+void load_field(mesh* Mesh,int X, int Y){
 	//clear_mesh(Mesh,X,Y);
 	ifstream myfile;
 	myfile.open("savefield.txt");
@@ -735,6 +697,5 @@ void load_field(mesh* Mesh,mesh* D_Mesh, int X, int Y){
 		}
 	}
 	myfile.close();
-	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 
