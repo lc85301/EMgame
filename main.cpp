@@ -17,9 +17,10 @@
 //TODO hard/soft/source
 //Yodalee add cuda function
 extern "C"
-void cudaUpdateKernel(mesh* d_m, int Nx, int Ny, double t);
+void cudaUpdateKernel(mesh* d_m, int Nx, int Ny);
 
 mesh* CUDAInit(int Nx, int Ny, mesh* h);
+void freeCUDA(mesh* d);
 void copyToDevice(mesh* h, mesh* d, size_t size);
 void copyFromDevice(mesh* h, mesh* d, size_t size);
 //Yodalee add cuda function
@@ -28,17 +29,17 @@ enum brushStyle{Square,Circle,Line};
 enum wheelMode{bSize,MaxF};
 enum fieldType{Ex,Ey,Hz};
 void set_mesh(mesh* Mesh,int X,int Y,double Ds, double d_cell);
-void reset_mesh(mesh* Mesh, int X,int Y);
-void clear_mesh(mesh* Mesh, int X,int Y);
+void reset_mesh(mesh* Mesh, mesh* D_Mesh, int X,int Y);
+void clear_mesh(mesh* Mesh, mesh* D_Mesh, int X,int Y);
 void save_field(mesh*,int,int,bool);
-void load_field(mesh*,int,int);
+void load_field(mesh*, mesh* D_Mesh,int,int);
 mesh* FDTD2DInit(double, double, int, int);
 void update_TEz(mesh* Mesh,int X,int Y);
 SDL_Surface* InitialSetting(string,int,int,int);
 double source(int,int,double,bool);
 GLuint loadTexture( const std::string &fileName );
 bool sourceEnable=true;
-bool cudaEnable=false;
+bool cudaEnable=true;
 int main(int argc,char* argv[]){
 	const int Matnum=4;
 	const int bStylenum=3;
@@ -56,9 +57,13 @@ int main(int argc,char* argv[]){
     SDL_Surface* surface=NULL;
     surface=InitialSetting("EMGame",500,700,FDTDSIZE);
     mesh* Mesh=FDTD2DInit(0.05,5e-11,FDTDSIZE,FDTDSIZE);
-	mesh* D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, Mesh);
-	copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
-	copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+
+	mesh* D_Mesh;
+	if (cudaEnable) {
+		D_Mesh=CUDAInit(FDTDSIZE, FDTDSIZE, Mesh);
+		copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+		copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+	}
 
     bool isRunning=true;
     bool isDrag=false;
@@ -227,6 +232,7 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
@@ -235,6 +241,7 @@ int main(int argc,char* argv[]){
 						for(int j=Y-brushsize;j<Y+brushsize;j++){
 							if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL&&((i-X)*(i-X)+(j-Y)*(j-Y)<brushsize*brushsize))
 							Mesh[i*FDTDSIZE+j].set_material(currentMat);
+							if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 						}
 					}
 					break;
@@ -248,6 +255,7 @@ int main(int argc,char* argv[]){
 							for(int j=Starty-brushsize;j<Starty+brushsize;j++){
 								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 								Mesh[i*FDTDSIZE+j].set_material(currentMat);
+								if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 							}
 						}
 					}else{
@@ -255,6 +263,7 @@ int main(int argc,char* argv[]){
 							for(int j=min(Starty,Endy)-brushsize;j<max(Starty,Endy)+brushsize;j++){
 								if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 								Mesh[i*FDTDSIZE+j].set_material(currentMat);
+								if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 							}
 						}
 					}
@@ -267,11 +276,13 @@ int main(int argc,char* argv[]){
 					for(int i=min(Startx,Endx);i<=max(Startx,Endx);i++){
 						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&Starty<FDTDSIZE-D_CELL&&Starty>D_CELL)
 						Mesh[i*FDTDSIZE+Starty].Srctype=currentSrc;
+						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 					}
 				}else{
 					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 						if(Startx>D_CELL&&Startx<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 						Mesh[Startx*FDTDSIZE+j].Srctype=currentSrc;
+						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 					}
 				}
         	}else{
@@ -279,6 +290,7 @@ int main(int argc,char* argv[]){
 					for(int j=min(Starty,Endy);j<=max(Starty,Endy);j++){
 						if(i>D_CELL&&i<FDTDSIZE-D_CELL&&j<FDTDSIZE-D_CELL&&j>D_CELL)
 						Mesh[i*FDTDSIZE+j].Srctype=currentSrc;
+						if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 					}
 				}
         	}
@@ -286,12 +298,12 @@ int main(int argc,char* argv[]){
 			isRight=false;
 		}
         if(isReset){
-            reset_mesh(Mesh,FDTDSIZE,FDTDSIZE);
+            reset_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
             isReset=false;
         }
         if(isClear){
-            reset_mesh(Mesh,FDTDSIZE,FDTDSIZE);
-            clear_mesh(Mesh,FDTDSIZE,FDTDSIZE);
+            reset_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
+            clear_mesh(Mesh, D_Mesh, FDTDSIZE,FDTDSIZE);
             isClear=false;
         }
         if(isSave){
@@ -306,11 +318,16 @@ int main(int argc,char* argv[]){
 				saveY+=savecolumns;
 			}
         }else if(isLoad){
-			load_field(Mesh,FDTDSIZE,FDTDSIZE);
+			load_field(Mesh, D_Mesh,FDTDSIZE,FDTDSIZE);
 			isLoad=false;
         }
         else if(!isPause){
-            update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
+			if (!cudaEnable) {
+				update_TEz(Mesh,FDTDSIZE,FDTDSIZE);
+			} else {
+				cudaUpdateKernel(D_Mesh, FDTDSIZE, FDTDSIZE);
+				copyFromDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE);
+			}
         }
         //rendering
         glClear(GL_COLOR_BUFFER_BIT);
@@ -565,19 +582,21 @@ void set_mesh(mesh* Mesh,int X,int Y,double Ds, double Dt,double d_cell){
     }
     cout<<"Mesh Initialized\n";
 }
-void reset_mesh(mesh* Mesh,int X, int Y){
+void reset_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
     for(int i=0;i<X;i++){
         for(int j=0;j<Y;j++){
             Mesh[i*FDTDSIZE+j].reset();
         }
     }
+	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
-void clear_mesh(mesh* Mesh,int X, int Y){
+void clear_mesh(mesh* Mesh, mesh* D_Mesh,int X, int Y){
     for(int i=D_CELL;i<X-D_CELL;i++){
         for(int j=D_CELL;j<Y-D_CELL;j++){
             Mesh[i*FDTDSIZE+j].clearall();
         }
     }
+	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 void update_TEz(mesh* Mesh,int X,int Y){
     for(int i=1;i<X-1;i++){
@@ -620,6 +639,16 @@ mesh* CUDAInit(int X, int Y, mesh* h){
 	cout << "CPU total time to init memory is " <<  totaltime << " usec" << endl;
 #endif
 	return d_m;
+}
+
+void freeCUDA(mesh* d){
+	cudaError_t err = cudaSuccess;
+	err = cudaFree(d);
+	if (err != cudaSuccess)
+	{
+		fprintf(stderr, "Failed to free device mesh (error code %s)!\n", cudaGetErrorString(err));
+		exit(EXIT_FAILURE);
+	}
 }
 
 void copyToDevice(mesh* h, mesh* d, size_t size){
@@ -678,7 +707,7 @@ void save_field(mesh* Mesh,int X, int Y, bool first){
 	}
 	myfile.close();
 }
-void load_field(mesh* Mesh,int X, int Y){
+void load_field(mesh* Mesh,mesh* D_Mesh, int X, int Y){
 	//clear_mesh(Mesh,X,Y);
 	ifstream myfile;
 	myfile.open("savefield.txt");
@@ -706,5 +735,6 @@ void load_field(mesh* Mesh,int X, int Y){
 		}
 	}
 	myfile.close();
+	if (cudaEnable) { copyToDevice(Mesh, D_Mesh, FDTDSIZE*FDTDSIZE); }
 }
 

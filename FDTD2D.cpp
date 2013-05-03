@@ -149,9 +149,7 @@ void mesh::update_D(){
 void mesh::update_Ez(){
     Ez=Ex+Ey;
 }
-void mesh::update_Hz(){
-    Hz=Hx+Hy;
-}
+void mesh::update_Hz(){ Hz=Hx+Hy; }
 float* mesh::matcolor(){
     float color[4];
     switch(m.type){
